@@ -6,8 +6,8 @@ app.use(express.json());
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-const LOVABLE_API = process.env.LOVABLE_API;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || 'YOUR_RAPIDAPI_KEY';
 
 app.post('/webhook', async (req, res) => {
     const message = req.body.message;
@@ -15,20 +15,34 @@ app.post('/webhook', async (req, res) => {
     const userText = message.text;
 
     try {
-        const lovableResponse = await axios.post(LOVABLE_API, {
-            keyword: userText
-        }, {
+        // קריאה ל-RapidAPI לחיפוש מוצרים לפי מילות מפתח
+        const options = {
+            method: 'GET',
+            url: 'https://aliexpress-datahub.p.rapidapi.com/item_search',
+            params: { query: userText, page: '1' },
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${SUPABASE_KEY}`
+                'X-RapidAPI-Key': RAPIDAPI_KEY,
+                'X-RapidAPI-Host': 'aliexpress-datahub.p.rapidapi.com'
             }
-        });
+        };
 
-        const aiReply = lovableResponse.data.reply || 'No results found.';
+        const response = await axios.request(options);
+        const products = response.data.result.resultList || [];
+
+        let replyText = '';
+
+        if (products.length === 0) {
+            replyText = `No products found for "${userText}". Try another keyword.`;
+        } else {
+            // בנה תשובה עם 3 מוצרים ראשונים
+            products.slice(0, 3).forEach((product, index) => {
+                replyText += `${index + 1}. ${product.subject} - ${product.detailUrl}\n`;
+            });
+        }
 
         await axios.post(TELEGRAM_API, {
             chat_id: chatId,
-            text: aiReply
+            text: replyText
         });
 
         res.send('OK');
@@ -39,4 +53,5 @@ app.post('/webhook', async (req, res) => {
 });
 
 app.listen(3000, () => console.log('Bot is running on port 3000'));
+
 
