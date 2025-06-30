@@ -4,7 +4,7 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 8077997012: AAGZ20EbDT2aUxO_7DZPjJzwTBXxU5Yy20E;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '8077997012:AAGZ20EbDT2aUxO_7DZPjJzwTBXxU5Yy20E';
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
 const LOVABLE_API = process.env.LOVABLE_API || https://jscofgyorxlueihjzibd.supabase.co;
