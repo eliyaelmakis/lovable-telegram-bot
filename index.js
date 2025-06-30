@@ -23,6 +23,7 @@ app.post('/webhook', async (req, res) => {
                 'Authorization': `Bearer ${SUPABASE_KEY}`
             }
         });
+
         const aiReply = lovableResponse.data.reply || 'No results found.';
 
         await axios.post(TELEGRAM_API, {
