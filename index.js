@@ -16,14 +16,13 @@ app.post('/webhook', async (req, res) => {
 
     try {
         const lovableResponse = await axios.post(LOVABLE_API, {
-            prompt: `Find me AliExpress links for: ${userText}`
+            keyword: userText
         }, {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${SUPABASE_KEY}`
             }
         });
-
         const aiReply = lovableResponse.data.reply || 'No results found.';
 
         await axios.post(TELEGRAM_API, {
