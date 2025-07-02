@@ -1,57 +1,74 @@
-const express = require('express');
-const axios = require('axios');
+import express from "express";
+import axios from "axios";
 
 const app = express();
 app.use(express.json());
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
-const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+// ×©×•××‘ ××ª ×”×˜×•×§× ×™× ×ž×”×¡×‘×™×‘×”
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const SERPAPI_KEY = process.env.SERPAPI_KEY;
 
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || 'YOUR_RAPIDAPI_KEY';
+app.post("/", async (req, res) => {
+  const message = req.body.message;
+  if (!message || !message.text) return res.sendStatus(200);
 
-app.post('/webhook', async (req, res) => {
-    const message = req.body.message;
-    const chatId = message.chat.id;
-    const userText = message.text;
+  const chatId = message.chat.id;
+  const query = message.text;
 
-    try {
-        // ÷øéàä ì-RapidAPI ìçéôåù îåöøéí ìôé îéìåú îôúç
-        const options = {
-            method: 'GET',
-            url: 'https://aliexpress-datahub.p.rapidapi.com/item_search',
-            params: { query: userText, page: '1' },
-            headers: {
-                'X-RapidAPI-Key': RAPIDAPI_KEY,
-                'X-RapidAPI-Host': 'aliexpress-datahub.p.rapidapi.com'
-            }
-        };
-
-        const response = await axios.request(options);
-        const products = response.data.result.resultList || [];
-
-        let replyText = '';
-
-        if (products.length === 0) {
-            replyText = `No products found for "${userText}". Try another keyword.`;
-        } else {
-            // áðä úùåáä òí 3 îåöøéí øàùåðéí
-            products.slice(0, 3).forEach((product, index) => {
-                replyText += `${index + 1}. ${product.subject} - ${product.detailUrl}\n`;
-            });
+  try {
+    const response = await axios.get(
+      `https://serpapi.com/search.json`,
+      {
+        params: {
+          engine: "google",
+          q: `site:aliexpress.com ${query}`,
+          api_key: SERPAPI_KEY
         }
+      }
+    );
 
-        await axios.post(TELEGRAM_API, {
-            chat_id: chatId,
-            text: replyText
-        });
+    const results = response.data.organic_results || [];
 
-        res.send('OK');
-    } catch (error) {
-        console.error(error);
-        res.send('Error');
+    if (results.length === 0) {
+      await axios.post(
+        `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,
+        {
+          chat_id: chatId,
+          text: `No products found for "${query}". Try another keyword.`
+        }
+      );
+      return res.sendStatus(200);
     }
+
+    const topResults = results.slice(0, 3);
+    let reply = `Here are some AliExpress results for "${query}":\\n\\n`;
+
+    topResults.forEach(r => {
+      reply += `ðŸ‘‰ [${r.title}](${r.link})\\n\\n`;
+    });
+
+    await axios.post(
+      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,
+      {
+        chat_id: chatId,
+        text: reply,
+        parse_mode: "Markdown"
+      }
+    );
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    await axios.post(
+      `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,
+      {
+        chat_id: chatId,
+        text: "Sorry, something went wrong."
+      }
+    );
+    res.sendStatus(200);
+  }
 });
 
-app.listen(3000, () => console.log('Bot is running on port 3000'));
-
-
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on ${PORT}`));
