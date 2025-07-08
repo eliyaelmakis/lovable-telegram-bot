@@ -1,4 +1,4 @@
-const express = require('express');
+ï»¿const express = require('express');
 const axios = require('axios');
 
 const app = express();
@@ -9,13 +9,18 @@ const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || 'YOUR_RAPIDAPI_KEY';
 
+// ðŸ”¥ âž¡ï¸ ×”×•×¡×£ route GET ×œ×‘×“×™×§×” ×©×”×©×¨×ª ×¢×•×‘×“
+app.get('/', (req, res) => {
+    res.send('Server is running');
+});
+
 app.post('/webhook', async (req, res) => {
     const message = req.body.message;
     const chatId = message.chat.id;
     const userText = message.text;
 
     try {
-        // ÷øéàä ì-RapidAPI ìçéôåù îåöøéí ìôé îéìåú îôúç
+        // ×§×¨×™××” ×œ-RapidAPI ×œ×—×™×¤×•×© ×ž×•×¦×¨×™× ×œ×¤×™ ×ž×™×œ×•×ª ×ž×¤×ª×—
         const options = {
             method: 'GET',
             url: 'https://aliexpress-datahub.p.rapidapi.com/item_search',
@@ -34,7 +39,7 @@ app.post('/webhook', async (req, res) => {
         if (products.length === 0) {
             replyText = `No products found for "${userText}". Try another keyword.`;
         } else {
-            // áðä úùåáä òí 3 îåöøéí øàùåðéí
+            // ×‘× ×” ×ª×©×•×‘×” ×¢× 3 ×ž×•×¦×¨×™× ×¨××©×•× ×™×
             products.slice(0, 3).forEach((product, index) => {
                 replyText += `${index + 1}. ${product.subject} - ${product.detailUrl}\n`;
             });
@@ -52,6 +57,9 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
-app.listen(3000, () => console.log('Bot is running on port 3000'));
+// ðŸ”¥ âž¡ï¸ ×¢×“×›×Ÿ ××ª ×”-port
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Bot is running on port ${PORT}`));
+
 
 
