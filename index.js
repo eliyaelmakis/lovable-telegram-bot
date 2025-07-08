@@ -1,65 +1,72 @@
 const express = require('express');
 const axios = require('axios');
-
 const app = express();
+
 app.use(express.json());
 
-// טוקנים מהסביבה
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
+const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+
 const SERPAPI_KEY = process.env.SERPAPI_KEY || 'YOUR_SERPAPI_KEY';
 
-// 🔥 ➡️ route GET לבדיקה
-app.get('/', (req, res) => {
-    res.send('Server is running');
-});
+const AFFILIATE_BASE = "https://rzekl.com/g/XXXXXXXXXXXXXXXX/?ulp=";
+const SUBID = "&subid=alibot";
 
-app.post('/', async (req, res) => {
+function createAffiliateLink(productUrl) {
+    const encodedUrl = encodeURIComponent(productUrl);
+    return AFFILIATE_BASE + encodedUrl + SUBID;
+}
+
+app.post('/webhook', async (req, res) => {
     const message = req.body.message;
-    if (!message || !message.text) return res.sendStatus(200);
-
     const chatId = message.chat.id;
-    const userText = message.text;
+    const query = message.text;
 
     try {
-        // קריאה ל-SerpAPI לחיפוש בגוגל עם site:aliexpress.com
-        const response = await axios.get('https://serpapi.com/search.json', {
+        // 🔎 קריאה ל-SERPAPI
+        const serpResponse = await axios.get('https://serpapi.com/search.json', {
             params: {
-                engine: 'google',
-                q: `site:aliexpress.com ${userText}`,
+                engine: "google",
+                q: `site:aliexpress.com ${query}`,
                 api_key: SERPAPI_KEY
             }
         });
 
-        const results = response.data.organic_results || [];
-        let replyText = '';
+        const results = serpResponse.data.organic_results || [];
 
         if (results.length === 0) {
-            replyText = `No products found for "${userText}". Try another keyword.`;
-        } else {
-            // בנה תשובה עם 3 תוצאות ראשונות
-            results.slice(0, 3).forEach((r, index) => {
-                replyText += `${index + 1}. [${r.title}](${r.link})\n\n`;
+            await axios.post(TELEGRAM_API, {
+                chat_id: chatId,
+                text: `לא נמצאו תוצאות עבור "${query}". נסה מילות מפתח אחרות.`
             });
+            return res.send('OK');
         }
 
-        // שלח תשובה בטלגרם
-        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        // 🔗 המרת לינקים לאפיליאט
+        let reply = `🔎 *תוצאות עבור:* ${query}\n\n`;
+        results.slice(0, 3).forEach((r, i) => {
+            const affiliateLink = createAffiliateLink(r.link);
+            reply += `${i + 1}. [${r.title}](${affiliateLink})\n\n`;
+        });
+
+        // 📩 שליחת ההודעה למשתמש
+        await axios.post(TELEGRAM_API, {
             chat_id: chatId,
-            text: replyText,
+            text: reply,
             parse_mode: "Markdown"
         });
 
         res.send('OK');
+
     } catch (error) {
-        console.error("API ERROR:", error.response ? error.response.data : error.message);
-        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        console.error(error);
+        await axios.post(TELEGRAM_API, {
             chat_id: chatId,
-            text: "Sorry, something went wrong."
+            text: "❌ שגיאה בעיבוד הבקשה שלך. נסה שוב."
         });
         res.send('Error');
     }
 });
 
-// 🔥 ➡️ port
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Bot is running on port ${PORT}`));
