@@ -1,12 +1,11 @@
-﻿const express = require('express');
+const express = require('express');
 const axios = require('axios');
 
 const app = express();
 app.use(express.json());
 
+// שואב את הטוקנים מהסביבה
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
-const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || 'YOUR_RAPIDAPI_KEY';
 
 // 🔥 ➡️ הוסף route GET לבדיקה שהשרת עובד
@@ -16,6 +15,8 @@ app.get('/', (req, res) => {
 
 app.post('/webhook', async (req, res) => {
     const message = req.body.message;
+    if (!message || !message.text) return res.sendStatus(200);
+
     const chatId = message.chat.id;
     const userText = message.text;
 
@@ -45,7 +46,7 @@ app.post('/webhook', async (req, res) => {
             });
         }
 
-        await axios.post(TELEGRAM_API, {
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
             chat_id: chatId,
             text: replyText
         });
@@ -53,6 +54,10 @@ app.post('/webhook', async (req, res) => {
         res.send('OK');
     } catch (error) {
         console.error(error);
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: "Sorry, something went wrong."
+        });
         res.send('Error');
     }
 });
@@ -60,6 +65,3 @@ app.post('/webhook', async (req, res) => {
 // 🔥 ➡️ עדכן את ה-port
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Bot is running on port ${PORT}`));
-
-
-
