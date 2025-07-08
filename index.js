@@ -33,6 +33,7 @@ app.post('/webhook', async (req, res) => {
         };
 
         const response = await axios.request(options);
+        console.log("API response data:", response.data);
         const products = response.data.result.resultList || [];
 
         let replyText = '';
