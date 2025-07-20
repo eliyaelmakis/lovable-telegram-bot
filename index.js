@@ -5,69 +5,73 @@ const app = express();
 
 app.use(express.json());
 
-// 🔐 משתני סביבה
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "YOUR_TELEGRAM_BOT_TOKEN";
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN || "YOUR_ACCESS_TOKEN";
-const APP_KEY = process.env.APP_KEY || "YOUR_APP_KEY";
-const APP_SECRET = process.env.APP_SECRET || "YOUR_APP_SECRET";
-
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
-// 🔏 פונקציה לחישוב חתימה
-function generateSignature(params, secret) {
-  const sortedKeys = Object.keys(params).sort();
-  const baseString = sortedKeys.reduce(
-    (str, key) => str + key + params[key],
-    ""
-  );
-  const fullString = secret + baseString + secret;
+const APP_KEY = process.env.APP_KEY || "516788";
+const APP_SECRET = process.env.APP_SECRET || "WixDkQ3wFt24CJrIFKLXUYDh4vb7d20X";
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN || "YOUR_ACCESS_TOKEN";
 
-  const signature = crypto
-    .createHmac("sha256", secret)
-    .update(fullString)
+// 🔐 יצירת חתימה
+function generateSign(params) {
+  const sortedKeys = Object.keys(params).sort();
+  let baseString = APP_SECRET;
+  for (const key of sortedKeys) {
+    if (params[key]) baseString += key + params[key];
+  }
+  baseString += APP_SECRET;
+
+  const hash = crypto
+    .createHmac("sha256", APP_SECRET)
+    .update(baseString, "utf8")
     .digest("hex")
     .toUpperCase();
 
-  return signature;
+  return hash;
 }
 
+// 📡 חיפוש מוצרים והחזרת תוצאות
 app.post("/webhook", async (req, res) => {
   const message = req.body.message;
   const chatId = message.chat.id;
   const query = message.text;
 
+  const timestamp = new Date().toISOString().replace("T", " ").substring(0, 19);
+
+  const params = {
+    app_key: APP_KEY,
+    method: "aliexpress.affiliate.product.query",
+    sign_method: "sha256",
+    timestamp,
+    access_token: ACCESS_TOKEN,
+    keywords: query,
+    page_size: "3",
+  };
+
+  const sign = generateSign(params);
+  const finalParams = { ...params, sign };
+
   try {
-    const timestamp = Date.now().toString();
-    const uuid = crypto.randomUUID();
-
-    const params = {
-      keywords: query,
-      app_key: APP_KEY,
-      access_token: ACCESS_TOKEN,
-      timestamp,
-      uuid,
-      sign_method: "sha256",
-    };
-
-    const sign = generateSignature(params, APP_SECRET);
-
-    // 🔍 חיפוש באליאקספרס
-    const searchRes = await axios.get(
-      "https://api-sg.aliexpress.com/sync/search",
-      {
-        params: {
-          ...params,
-          sign,
-          page_size: 1,
-        },
-      }
+    const { data } = await axios.post(
+      "https://api-sg.aliexpress.com/rest",
+      null,
+      { params: finalParams }
     );
 
-    console.log("🔎 AliExpress Search Response:", searchRes.data);
+    if (data.error_response) {
+      console.error("🔎 AliExpress Search Error:", data);
+      await axios.post(TELEGRAM_API, {
+        chat_id: chatId,
+        text: `❌ שגיאה מה־API של AliExpress: ${data.error_response.msg}`,
+      });
+      return res.send("ERROR");
+    }
 
-    const product = searchRes.data.result_list?.[0];
+    const results =
+      data.aliexpress_affiliate_product_query_response?.resp_result?.result
+        ?.products || [];
 
-    if (!product) {
+    if (results.length === 0) {
       await axios.post(TELEGRAM_API, {
         chat_id: chatId,
         text: `❌ לא נמצאו תוצאות עבור "${query}".`,
@@ -75,41 +79,29 @@ app.post("/webhook", async (req, res) => {
       return res.send("NO_RESULTS");
     }
 
-    const productUrl = product.product_detail_url;
-    const productTitle = product.product_title;
+    let reply = `🔎 תוצאות עבור: *${query}*\n\n`;
+    results.forEach((p, i) => {
+      const link = p.product_detail_url;
+      const title = p.product_title.replace(/\s+/g, " ").trim();
+      reply += `${i + 1}. [${title}](${link})\n\n`;
+    });
 
-    // 🔗 לינק אפיליאט
-    const affiliateRes = await axios.post(
-      "https://api-sg.aliexpress.com/sync/generatePromotionLink",
-      {
-        access_token: ACCESS_TOKEN,
-        app_key: APP_KEY,
-        urls: [productUrl],
-      }
-    );
-
-    const affiliateLink =
-      affiliateRes.data.result?.[0]?.promotion_link || productUrl;
-
-    // 📩 שליחה בטלגרם
     await axios.post(TELEGRAM_API, {
       chat_id: chatId,
-      text: `🔎 *${productTitle}*\n\n[מעבר למוצר](${affiliateLink})`,
+      text: reply,
       parse_mode: "Markdown",
     });
 
     res.send("OK");
-  } catch (error) {
-    console.error("❌ שגיאה:", error.response?.data || error.message);
+  } catch (err) {
+    console.error("❌ בקשה נכשלה:", err.message);
     await axios.post(TELEGRAM_API, {
       chat_id: chatId,
-      text: "❌ שגיאה בעיבוד הבקשה שלך. נסה שוב.",
+      text: "❌ שגיאה כללית. נסה שוב.",
     });
     res.send("ERROR");
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`🚀 AliExpress Bot is running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 AliBot is running on port ${PORT}`));
