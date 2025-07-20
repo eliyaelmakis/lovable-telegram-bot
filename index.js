@@ -4,7 +4,6 @@ const app = express();
 
 app.use(express.json());
 
-// 📌 משתני סביבה
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "YOUR_TELEGRAM_BOT_TOKEN";
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN || "YOUR_ACCESS_TOKEN";
 const APP_KEY = process.env.APP_KEY || "YOUR_APP_KEY";
@@ -17,7 +16,10 @@ app.post("/webhook", async (req, res) => {
   const query = message.text;
 
   try {
-    // 🔍 שליחת בקשת חיפוש לממשק AliExpress
+    // ⚙️ הוספת timestamp נוכחי במילישניות
+    const timestamp = Date.now();
+
+    // 🔍 קריאת חיפוש ל-AliExpress עם timestamp
     const searchRes = await axios.get(
       "https://api-sg.aliexpress.com/sync/search",
       {
@@ -26,11 +28,11 @@ app.post("/webhook", async (req, res) => {
           app_key: APP_KEY,
           access_token: ACCESS_TOKEN,
           page_size: 1,
+          timestamp,
         },
       }
     );
 
-    // 🖨️ הדפסת תגובת החיפוש ללוגים
     console.log("🔎 AliExpress Search Response:", searchRes.data);
 
     const product = searchRes.data.result_list?.[0];
@@ -46,20 +48,21 @@ app.post("/webhook", async (req, res) => {
     const productUrl = product.product_detail_url;
     const productTitle = product.product_title;
 
-    // 🔗 יצירת לינק אפיליאייט
+    // 🔗 קריאה ליצירת קישור שותפים
     const affiliateRes = await axios.post(
       "https://api-sg.aliexpress.com/sync/generatePromotionLink",
       {
         access_token: ACCESS_TOKEN,
         app_key: APP_KEY,
         urls: [productUrl],
+        timestamp,
       }
     );
 
     const affiliateLink =
       affiliateRes.data.result?.[0]?.promotion_link || productUrl;
 
-    // 📩 שליחת קישור בטלגרם
+    // 📩 שליחת ההודעה בטלגרם
     await axios.post(TELEGRAM_API, {
       chat_id: chatId,
       text: `🔎 *${productTitle}*\n\n[מעבר למוצר](${affiliateLink})`,
