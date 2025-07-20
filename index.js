@@ -1,72 +1,80 @@
-const express = require('express');
-const axios = require('axios');
+const express = require("express");
+const axios = require("axios");
 const app = express();
 
 app.use(express.json());
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
+// 📌 משתני סביבה
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "YOUR_TELEGRAM_BOT_TOKEN";
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN || "YOUR_ACCESS_TOKEN";
+const APP_KEY = process.env.APP_KEY || "YOUR_APP_KEY";
+
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
-const SERPAPI_KEY = process.env.SERPAPI_KEY || 'YOUR_SERPAPI_KEY';
+app.post("/webhook", async (req, res) => {
+  const message = req.body.message;
+  const chatId = message.chat.id;
+  const query = message.text;
 
-const AFFILIATE_BASE = "https://rzekl.com/g/XXXXXXXXXXXXXXXX/?ulp=";
-const SUBID = "&subid=alibot";
+  try {
+    // 🔍 שליחת בקשת חיפוש לממשק AliExpress
+    const searchRes = await axios.get(
+      "https://api-sg.aliexpress.com/sync/search",
+      {
+        params: {
+          keywords: query,
+          app_key: APP_KEY,
+          access_token: ACCESS_TOKEN,
+          page_size: 1,
+        },
+      }
+    );
 
-function createAffiliateLink(productUrl) {
-    const encodedUrl = encodeURIComponent(productUrl);
-    return AFFILIATE_BASE + encodedUrl + SUBID;
-}
+    const product = searchRes.data.result_list?.[0];
 
-app.post('/webhook', async (req, res) => {
-    const message = req.body.message;
-    const chatId = message.chat.id;
-    const query = message.text;
-
-    try {
-        // 🔎 קריאה ל-SERPAPI
-        const serpResponse = await axios.get('https://serpapi.com/search.json', {
-            params: {
-                engine: "google",
-                q: `site:aliexpress.com ${query}`,
-                api_key: SERPAPI_KEY
-            }
-        });
-
-        const results = serpResponse.data.organic_results || [];
-
-        if (results.length === 0) {
-            await axios.post(TELEGRAM_API, {
-                chat_id: chatId,
-                text: `לא נמצאו תוצאות עבור "${query}". נסה מילות מפתח אחרות.`
-            });
-            return res.send('OK');
-        }
-
-        // 🔗 המרת לינקים לאפיליאט
-        let reply = `🔎 *תוצאות עבור:* ${query}\n\n`;
-        results.slice(0, 3).forEach((r, i) => {
-            const affiliateLink = createAffiliateLink(r.link);
-            reply += `${i + 1}. [${r.title}](${affiliateLink})\n\n`;
-        });
-
-        // 📩 שליחת ההודעה למשתמש
-        await axios.post(TELEGRAM_API, {
-            chat_id: chatId,
-            text: reply,
-            parse_mode: "Markdown"
-        });
-
-        res.send('OK');
-
-    } catch (error) {
-        console.error(error);
-        await axios.post(TELEGRAM_API, {
-            chat_id: chatId,
-            text: "❌ שגיאה בעיבוד הבקשה שלך. נסה שוב."
-        });
-        res.send('Error');
+    if (!product) {
+      await axios.post(TELEGRAM_API, {
+        chat_id: chatId,
+        text: `❌ לא נמצאו תוצאות עבור "${query}".`,
+      });
+      return res.send("NO_RESULTS");
     }
+
+    const productUrl = product.product_detail_url;
+    const productTitle = product.product_title;
+
+    // 🔗 יצירת לינק אפיליאייט
+    const affiliateRes = await axios.post(
+      "https://api-sg.aliexpress.com/sync/generatePromotionLink",
+      {
+        access_token: ACCESS_TOKEN,
+        app_key: APP_KEY,
+        urls: [productUrl],
+      }
+    );
+
+    const affiliateLink =
+      affiliateRes.data.result?.[0]?.promotion_link || productUrl;
+
+    // 📩 שליחת קישור בטלגרם
+    await axios.post(TELEGRAM_API, {
+      chat_id: chatId,
+      text: `🔎 *${productTitle}*\n\n[מעבר למוצר](${affiliateLink})`,
+      parse_mode: "Markdown",
+    });
+
+    res.send("OK");
+  } catch (error) {
+    console.error("❌ שגיאה:", error.response?.data || error.message);
+    await axios.post(TELEGRAM_API, {
+      chat_id: chatId,
+      text: "❌ שגיאה בעיבוד הבקשה שלך. נסה שוב.",
+    });
+    res.send("ERROR");
+  }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Bot is running on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 AliExpress Bot is running on port ${PORT}`)
+);
