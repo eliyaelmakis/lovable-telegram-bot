@@ -30,6 +30,9 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
+    // 🖨️ הדפסת תגובת החיפוש ללוגים
+    console.log("🔎 AliExpress Search Response:", searchRes.data);
+
     const product = searchRes.data.result_list?.[0];
 
     if (!product) {
