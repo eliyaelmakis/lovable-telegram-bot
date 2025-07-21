@@ -1,3 +1,4 @@
+// index.js
 const express = require("express");
 const axios = require("axios");
 const crypto = require("crypto");
@@ -13,23 +14,27 @@ const APP_SECRET = process.env.APP_SECRET || "YOUR_APP_SECRET";
 
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
-function generateAliSignature(params, appSecret, method) {
+function generateAliSignature(params, appSecret) {
   const sortedKeys = Object.keys(params)
     .filter((k) => k !== "sign")
     .sort();
-  let baseString = method;
+
+  let baseString = "";
   sortedKeys.forEach((key) => {
     const val = params[key];
     if (val !== undefined && val !== "") {
       baseString += key + val;
     }
   });
+
   const toSign = appSecret + baseString + appSecret;
+
   const sign = crypto
     .createHmac("sha256", appSecret)
     .update(toSign, "utf8")
     .digest("hex")
     .toUpperCase();
+
   return sign;
 }
 
@@ -41,10 +46,9 @@ app.post("/webhook", async (req, res) => {
   try {
     const timestamp = Date.now().toString();
     const uuid = uuidv4();
-    const method = "aliexpress.affiliate.product.query";
 
     const params = {
-      method,
+      method: "aliexpress.affiliate.product.query",
       app_key: APP_KEY,
       timestamp,
       sign_method: "sha256",
@@ -55,7 +59,7 @@ app.post("/webhook", async (req, res) => {
       uuid,
     };
 
-    const sign = generateAliSignature(params, APP_SECRET, method);
+    const sign = generateAliSignature(params, APP_SECRET);
     params.sign = sign;
 
     console.log("\u{1F50D} Query from user:", query);
@@ -66,6 +70,7 @@ app.post("/webhook", async (req, res) => {
       null,
       { params }
     );
+
     console.log("\u{1F50E} AliExpress Search Response:", searchRes.data);
 
     const results = searchRes.data.result?.products || [];
