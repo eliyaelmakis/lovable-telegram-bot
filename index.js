@@ -1,9 +1,8 @@
-// index.js
 const express = require("express");
 const axios = require("axios");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
-require("dotenv").config(); // תיקון קטן – זה היה כתוב לא נכון בקוד שלך
+require("dotenv").config();
 
 const app = express();
 app.use(express.json());
@@ -12,8 +11,10 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const APP_KEY = process.env.APP_KEY;
 const APP_SECRET = process.env.APP_SECRET;
+
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
+// פונקציית חתימה לפי המדריך של AliExpress
 function generateAliSignature(params, appSecret, apiPath) {
   const sortedKeys = Object.keys(params)
     .filter((k) => k !== "sign" && params[k] !== undefined && params[k] !== "")
@@ -41,8 +42,7 @@ app.post("/webhook", async (req, res) => {
   try {
     const timestamp = Date.now().toString();
     const uuid = uuidv4();
-    const method = "aliexpress.affiliate.product.query"; // שים לב שזה השם הרשמי
-    const apiPath = method; // לשימוש ב-signature
+    const method = "aliexpress.affiliate.product.query";
 
     const params = {
       method,
@@ -57,7 +57,7 @@ app.post("/webhook", async (req, res) => {
       format: "json",
     };
 
-    const sign = generateAliSignature(params, APP_SECRET, apiPath);
+    const sign = generateAliSignature(params, APP_SECRET, method);
     params.sign = sign;
 
     console.log("🔍 Query from user:", query);
@@ -67,7 +67,7 @@ app.post("/webhook", async (req, res) => {
       params,
     });
 
-    console.log("📦 AliExpress Response Full:", JSON.stringify(response.data, null, 2));
+    console.log("📦 AliExpress Response Full:", response.data);
 
     const results = response.data.result?.products || [];
 
