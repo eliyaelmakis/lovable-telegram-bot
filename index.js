@@ -1,47 +1,48 @@
-// index.js
 const express = require("express");
 const axios = require("axios");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
-require("dotenvconfig");
+require("dotenv").config();
 
 const app = express();
 app.use(express.json());
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || "YOUR_TELEGRAM_BOT_TOKEN";
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN || "YOUR_ACCESS_TOKEN";
-const APP_KEY = process.env.APP_KEY || "YOUR_APP_KEY";
-const APP_SECRET = process.env.APP_SECRET || "YOUR_APP_SECRET";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
-function generateAliSignature(params, appSecret, apiMethod) {
+const APP_KEY = process.env.APP_KEY;
+const APP_SECRET = process.env.APP_SECRET;
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+
+// 🧩 חתימת בקשה לפי Business API
+function generateAliBusinessSignature(params, appSecret, method) {
   const sortedKeys = Object.keys(params)
     .filter((k) => k !== "sign")
     .sort();
-  let baseString = apiMethod;
-  sortedKeys.forEach((key) => {
-    const val = params[key];
-    if (val !== undefined && val !== "") {
-      baseString += key + val;
-    }
-  });
-  const sign = crypto
+  let baseString = "";
+  for (const key of sortedKeys) {
+    baseString += key + params[key];
+  }
+  baseString = method + baseString;
+
+  return crypto
     .createHmac("sha256", appSecret)
-    .update(baseString, "utf8")
+    .update(baseString)
     .digest("hex")
     .toUpperCase();
-  return sign;
 }
 
 app.post("/webhook", async (req, res) => {
   const message = req.body.message;
-  const chatId = message.chat.id;
-  const query = message.text;
+  const chatId = message?.chat?.id;
+  const query = message?.text;
+
+  if (!chatId || !query) return res.send("INVALID_INPUT");
 
   try {
+    const method = "aliexpress.affiliate.product.query";
     const timestamp = Date.now().toString();
     const uuid = uuidv4();
-    const method = "aliexpress.affiliate.product.query";
 
     const params = {
       method,
@@ -55,20 +56,15 @@ app.post("/webhook", async (req, res) => {
       uuid,
     };
 
-    const sign = generateAliSignature(params, APP_SECRET, method);
+    const sign = generateAliBusinessSignature(params, APP_SECRET, method);
     params.sign = sign;
-
-    console.log("🔍 Query from user:", query);
-    console.log("🧩 Final request params:", params);
 
     const response = await axios.get("https://api-sg.aliexpress.com/sync", {
       params,
     });
 
-    console.log("🔎 AliExpress Search Response:", response.data);
-
-    const results = response.data.result?.products || [];
-    if (results.length === 0) {
+    const products = response.data.result?.products || [];
+    if (products.length === 0) {
       await axios.post(TELEGRAM_API, {
         chat_id: chatId,
         text: `❌ לא נמצאו תוצאות עבור "${query}".`,
@@ -76,19 +72,19 @@ app.post("/webhook", async (req, res) => {
       return res.send("NO_RESULTS");
     }
 
-    const product = results[0];
-    const productTitle = product.product_title || "מוצר";
-    const productUrl = product.product_detail_url || product.detail_url;
+    const product = products[0];
+    const title = product.product_title || "מוצר";
+    const url = product.product_detail_url || product.detail_url;
 
     await axios.post(TELEGRAM_API, {
       chat_id: chatId,
-      text: `🔎 *${productTitle}*\n\n[מעבר למוצר](${productUrl})`,
+      text: `🔎 *${title}*\n\n[מעבר למוצר](${url})`,
       parse_mode: "Markdown",
     });
 
     res.send("OK");
-  } catch (error) {
-    console.error("❌ שגיאה:", error.response?.data || error.message);
+  } catch (err) {
+    console.error("❌ שגיאה:", err.response?.data || err.message);
     await axios.post(TELEGRAM_API, {
       chat_id: chatId,
       text: "❌ שגיאה בעיבוד הבקשה שלך. נסה שוב.",
